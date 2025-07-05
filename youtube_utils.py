@@ -9,7 +9,6 @@ import re
 
 import googleapiclient.discovery
 from googleapiclient.http import HttpError
-from youtube_transcript_api import TranscriptsDisabled, NoTranscriptFound
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
