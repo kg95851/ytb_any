@@ -9,4 +9,5 @@ matplotlib
 reportlab
 yt-dlp
 google-auth-oauthlib
-PyMuPDF 
+PyMuPDF
+tabulate 
