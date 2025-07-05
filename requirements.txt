@@ -10,4 +10,5 @@ reportlab
 yt-dlp
 google-auth-oauthlib
 PyMuPDF
-tabulate 
+tabulate
+youtube-transcript-api 
