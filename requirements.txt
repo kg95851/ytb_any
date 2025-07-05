@@ -1,0 +1,12 @@
+streamlit
+openai
+google-generativeai
+google-api-python-client
+gspread
+oauth2client
+pandas
+matplotlib
+reportlab
+yt-dlp
+google-auth-oauthlib
+PyMuPDF 

@@ -1,0 +1,29 @@
+# Service Account Key files
+*.json
+
+# Python virtual environment
+venv/
+*.venv/
+env/
+.env
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# IDE/Editor specific
+.vscode/
+.idea/
+*.swp
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+
+# Streamlit secrets (if used)
+.streamlit/secrets.toml 
