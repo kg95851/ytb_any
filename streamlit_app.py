@@ -728,7 +728,9 @@ def render_analysis_page():
     # --- 분석 데이터 관리 (삭제 기능 포함) ---
     with st.expander("🔬 분석 데이터 관리", expanded=False):
         df_for_editing = pd.DataFrame(st.session_state.analysis_data)
-        df_for_editing.insert(0, "삭제", False)
+        
+        select_all_delete_analysis = st.checkbox("전체 삭제", key="delete_all_analysis_data")
+        df_for_editing.insert(0, "삭제", select_all_delete_analysis)
 
         edited_df = st.data_editor(
             df_for_editing,
@@ -749,7 +751,7 @@ def render_analysis_page():
             ]
             st.toast(f"{len(indices_to_delete)}개 항목을 분석 데이터에서 삭제했습니다.")
             st.rerun()
-            
+
     # 삭제 후 데이터가 남아있는지 다시 확인
     if not st.session_state.get('analysis_data'):
         st.info("모든 데이터가 삭제되었습니다. 새로운 데이터를 추가해주세요.")
@@ -838,6 +840,10 @@ def render_analysis_page():
                     # 일 평균 조회수 합계
                     total_avg_daily_views = channel_df['일 평균 조회수'].sum()
                     st.metric(label="채널의 일 평균 조회수 총합", value=f"{total_avg_daily_views:,}")
+                with col2:
+                    # 영상당 일 평균 조회수
+                    avg_daily_views = channel_df['일 평균 조회수'].mean()
+                    st.metric(label="채널의 영상당 일 평균 조회수", value=f"{int(avg_daily_views):,}")
 
                 # 조회수 구간 분석
                 bins = [0, 1000, 100000, 500000, 1000000, float('inf')]
@@ -850,11 +856,13 @@ def render_analysis_page():
                 view_dist_df.columns = ['조회수 구간', '개수']
                 
                 total_videos = len(channel_df)
-                view_dist_df['전체 비율'] = (view_dist_df['개수'] / total_videos * 100).apply(lambda x: f"{x:.2f}%")
-
-                with col2:
-                    st.write("조회수 구간별 분포")
-                    st.dataframe(view_dist_df, hide_index=True)
+                if total_videos > 0:
+                    view_dist_df['전체 비율'] = (view_dist_df['개수'] / total_videos * 100).apply(lambda x: f"{x:.2f}%")
+                else:
+                    view_dist_df['전체 비율'] = "0.00%"
+                
+                st.write("조회수 구간별 분포")
+                st.dataframe(view_dist_df, hide_index=True, use_container_width=True)
 
             with st.expander("해당 채널의 영상 목록 보기"):
                 st.dataframe(channel_df[['제목', '조회수', '게시일', '일 평균 조회수']].sort_values(by='일 평균 조회수', ascending=False), use_container_width=True)
@@ -878,6 +886,10 @@ def render_analysis_page():
                     # 일 평균 조회수 합계
                     total_avg_daily_views = group_df['일 평균 조회수'].sum()
                     st.metric(label="그룹의 일 평균 조회수 총합", value=f"{total_avg_daily_views:,}")
+                with col2:
+                    # 영상당 일 평균 조회수
+                    avg_daily_views = group_df['일 평균 조회수'].mean()
+                    st.metric(label="그룹의 영상당 일 평균 조회수", value=f"{int(avg_daily_views):,}")
 
                 # 조회수 구간 분석
                 bins = [0, 1000, 100000, 500000, 1000000, float('inf')]
@@ -890,11 +902,13 @@ def render_analysis_page():
                 view_dist_df.columns = ['조회수 구간', '개수']
                 
                 total_videos = len(group_df)
-                view_dist_df['전체 비율'] = (view_dist_df['개수'] / total_videos * 100).apply(lambda x: f"{x:.2f}%")
+                if total_videos > 0:
+                    view_dist_df['전체 비율'] = (view_dist_df['개수'] / total_videos * 100).apply(lambda x: f"{x:.2f}%")
+                else:
+                    view_dist_df['전체 비율'] = "0.00%"
 
-                with col2:
-                    st.write("조회수 구간별 분포")
-                    st.dataframe(view_dist_df, hide_index=True)
+                st.write("조회수 구간별 분포")
+                st.dataframe(view_dist_df, hide_index=True, use_container_width=True)
 
             with st.expander("해당 그룹의 영상 목록 보기"):
                 st.dataframe(group_df[['채널명', '제목', '조회수', '게시일', '일 평균 조회수']].sort_values(by='일 평균 조회수', ascending=False), use_container_width=True)
