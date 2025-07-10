@@ -193,7 +193,6 @@ def render_data_table(title, data_key):
             if st.button(f"🗑️ 선택한 항목 삭제", type="primary", disabled=not indices_to_delete, key=f"{data_key}_delete_selected"):
                 for index in sorted(indices_to_delete, reverse=True):
                     del st.session_state[data_key][index]
-                st.session_state[f"delete_all_{data_key}"] = False # 전체 선택 초기화
                 st.rerun()
         
         with btn_col2:
@@ -213,7 +212,6 @@ def render_data_table(title, data_key):
                 skipped_count = moved_count - len(new_items_to_move)
                 
                 st.toast(f"{len(new_items_to_move)}개 항목을 분석으로 이동했습니다. (중복 {skipped_count}개 제외)")
-                st.session_state[f"move_all_{data_key}"] = False # 전체 선택 초기화
                 st.rerun()
 
 def render_settings_page():
