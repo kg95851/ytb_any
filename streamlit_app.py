@@ -5,6 +5,7 @@ import youtube_utils
 import analysis_utils
 import pdf_utils
 import matplotlib.pyplot as plt
+from datetime import datetime
 
 def initialize_app_state():
     """앱의 모든 세션 상태 변수를 초기화합니다."""
@@ -63,6 +64,10 @@ def initialize_app_state():
     # 채널 업로드 시간 분석 페이지
     if 'time_analysis_url' not in st.session_state:
         st.session_state.time_analysis_url = ""
+        
+    # 데이터 분석 페이지
+    if 'analysis_data' not in st.session_state:
+        st.session_state.analysis_data = []
 
     # 테마 모드
     if 'theme_is_dark' not in st.session_state:
@@ -152,27 +157,41 @@ def render_data_table(title, data_key):
         
         df_to_display = df.copy()
         df_to_display.insert(0, "삭제", False)
+        df_to_display.insert(1, "분석으로 이동", False)
 
         edited_df = st.data_editor(
             df_to_display,
             use_container_width=True,
             hide_index=True,
             column_config={
-                "삭제": st.column_config.CheckboxColumn(
-                    "삭제할 행 선택",
-                    default=False,
-                )
+                "삭제": st.column_config.CheckboxColumn("삭제", default=False),
+                "분석으로 이동": st.column_config.CheckboxColumn("이동", default=False),
             },
             disabled=df.columns,
             key=f"{data_key}_editor"
         )
 
         indices_to_delete = edited_df[edited_df["삭제"] == True].index.tolist()
+        indices_to_move = edited_df[edited_df["분석으로 이동"] == True].index.tolist()
 
-        if st.button(f"🗑️ 선택한 항목 삭제 ({title})", type="primary", disabled=not indices_to_delete, key=f"{data_key}_delete_selected"):
-            for index in sorted(indices_to_delete, reverse=True):
-                del st.session_state[data_key][index]
-            st.rerun()
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button(f"🗑️ 선택한 항목 삭제", type="primary", disabled=not indices_to_delete, key=f"{data_key}_delete_selected"):
+                for index in sorted(indices_to_delete, reverse=True):
+                    del st.session_state[data_key][index]
+                st.rerun()
+        
+        with col2:
+            if st.button(f"➡️ 분석으로 이동", disabled=not indices_to_move, key=f"{data_key}_move_selected"):
+                items_to_move = [st.session_state[data_key][i] for i in indices_to_move]
+                st.session_state.analysis_data.extend(items_to_move)
+
+                # Move한 항목은 원래 리스트에서 삭제
+                for index in sorted(indices_to_move, reverse=True):
+                    del st.session_state[data_key][index]
+                
+                st.toast(f"{len(items_to_move)}개 항목을 분석으로 이동했습니다.")
+                st.rerun()
 
 def render_settings_page():
     st.title("⚙️ 설정")
@@ -648,6 +667,49 @@ def render_time_analysis_page():
             else:
                 st.warning("분석할 영상 데이터가 없습니다.")
 
+def render_analysis_page():
+    st.title("📊 데이터 분석")
+    st.markdown("수집된 데이터의 일 평균 조회수를 분석합니다.")
+    
+    if not st.session_state.get('analysis_data'):
+        st.warning("'스크립트 & 댓글 수집' 탭에서 분석할 데이터를 먼저 옮겨주세요.")
+        return
+
+    df = pd.DataFrame(st.session_state.analysis_data)
+    
+    # --- 일 평균 조회수 계산 ---
+    # '게시일' 컬럼을 datetime 객체로 변환
+    df['게시일'] = pd.to_datetime(df['게시일'])
+    
+    # 영상이 게시된 후 지난 날짜 계산
+    now = pd.to_datetime(datetime.now())
+    df['게시 후 일수'] = (now - df['게시일']).dt.days
+    # 최소 1일로 설정하여 0으로 나누는 오류 방지
+    df['게시 후 일수'] = df['게시 후 일수'].apply(lambda x: max(x, 1))
+
+    # 일 평균 조회수 계산
+    df['일 평균 조회수'] = df['조회수'] / df['게시 후 일수']
+    df['일 평균 조회수'] = df['일 평균 조회수'].astype(int)
+
+    # --- 채널별 통계 ---
+    st.divider()
+    st.subheader("📈 채널별 일 평균 조회수 합계")
+
+    # 채널별로 그룹화하여 일 평균 조회수 합산
+    channel_avg_views = df.groupby('채널명')['일 평균 조회수'].sum().reset_index()
+    channel_avg_views = channel_avg_views.sort_values(by='일 평균 조회수', ascending=False)
+    
+    st.dataframe(channel_avg_views, use_container_width=True)
+
+    # --- 전체 통계 ---
+    total_avg_daily_views = df['일 평균 조회수'].sum()
+    st.metric(label="전체 채널의 일 평균 조회수 총합", value=f"{total_avg_daily_views:,}")
+
+    # --- 원본 데이터 표시 ---
+    st.divider()
+    with st.expander("분석에 사용된 데이터 보기"):
+        st.dataframe(df[['채널명', '제목', '조회수', '게시일', '게시 후 일수', '일 평균 조회수']], use_container_width=True)
+
 def main():
     st.set_page_config(page_title="YouTube 분석 도구", layout="wide")
     
@@ -676,6 +738,7 @@ def main():
     
     page_options = {
         "스크립트 & 댓글 수집": "📊 스크립트 & 댓글 수집",
+        "데이터 분석": "📊 데이터 분석",
         "개별 영상 분석": "🔎 개별 영상 분석",
         "채널 종합 분석": "📈 채널 종합 분석",
         "대본 비교 분석": "🔄 대본 비교 분석",
@@ -704,6 +767,7 @@ def main():
 
     page_map = {
         "스크립트 & 댓글 수집": render_collection_page,
+        "데이터 분석": render_analysis_page,
         "개별 영상 분석": render_individual_analysis_page,
         "채널 종합 분석": render_channel_analysis_page,
         "대본 비교 분석": render_comparison_page,
