@@ -68,6 +68,10 @@ def initialize_app_state():
     # 데이터 분석 페이지
     if 'analysis_data' not in st.session_state:
         st.session_state.analysis_data = []
+    if 'custom_groups' not in st.session_state:
+        st.session_state.custom_groups = {}
+    if 'analysis_view_mode' not in st.session_state:
+        st.session_state.analysis_view_mode = "채널별"
 
     # 테마 모드
     if 'theme_is_dark' not in st.session_state:
@@ -199,60 +203,69 @@ def render_settings_page():
 
     st.divider()
 
-    with st.container(border=True):
+    with st.form("api_settings_form"):
         st.subheader("API 키 관리")
-        st.info("입력한 API 키는 현재 세션에만 임시로 저장되며, 페이지를 새로고침하면 다시 입력해야 합니다.")
+        st.info("API 키를 입력하거나 수정한 후, 반드시 하단의 '저장 및 초기화' 버튼을 눌러주세요.")
 
-        # Gemini API Key
-        st.text_input(
-            "Gemini API 키", 
-            type="password",
-            key="gemini_api_key"
+        # --- Gemini API Key ---
+        gemini_key_input = st.text_input(
+            "Gemini API 키",
+            value=st.session_state.get("gemini_api_key", ""),
+            type="password"
         )
-        if st.button("Gemini 키 저장"):
-            # The key is already saved to session state by the text_input widget's key
-            st.success("Gemini API 키가 현재 세션에 저장되었습니다.")
 
-        # YouTube API Keys
+        st.markdown("---")
+
+        # --- YouTube API Keys ---
         st.markdown("#### YouTube API 키")
         youtube_keys = st.session_state.get('youtube_api_keys', [])
-    
-        for i in range(len(youtube_keys)):
-            col1, col2 = st.columns([4, 1])
-            col1.text_input(f"키 {i+1}", value=youtube_keys[i], disabled=True, key=f"yt_key_disp_{i}")
-            if col2.button("삭제", key=f"del_yt_key_{i}"):
-                st.session_state.youtube_api_keys.pop(i)
-                st.rerun()
-
-        new_yt_key = st.text_input("새 YouTube API 키 추가")
-        if st.button("YouTube 키 추가"):
-            if new_yt_key and new_yt_key not in st.session_state.get('youtube_api_keys', []):
-                st.session_state.youtube_api_keys.append(new_yt_key)
-                st.rerun()
-            elif not new_yt_key:
-                st.warning("API 키를 입력해주세요.")
-            else:
-                st.warning("이미 등록된 키입니다.")
-
-        st.divider()
         
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("🔄 API 클라이언트 초기화", type="primary"):
-                with st.spinner("클라이언트를 초기화하는 중..."):
-                    youtube_utils.initialize_clients(st)
-                if st.session_state.get('youtube_client'):
-                    st.success("클라이언트가 성공적으로 초기화되었습니다.")
-                    st.session_state.clients_initialized = True
-                else:
-                    st.error("클라이언트 초기화에 실패했습니다. API 키를 확인해주세요.")
+        # Display existing keys (not part of the form submission data)
+        for i, key in enumerate(youtube_keys):
+            st.text_input(f"저장된 키 {i+1}", value=key, disabled=True, key=f"yt_key_disp_{i}")
 
-        with col2:
-            if st.button("⚠️ 모든 저장된 키 삭제"):
-                st.session_state.youtube_api_keys = []
-                st.session_state.gemini_api_key = ""
-                st.success("현재 세션의 모든 API 키가 삭제되었습니다.")
-                st.rerun()
+        new_yt_key_input = st.text_input("새 YouTube API 키 추가")
+
+        st.markdown("---")
+        
+        # --- Form Submission ---
+        submitted = st.form_submit_button("💾 저장 및 클라이언트 초기화")
+
+        if submitted:
+            # Update session state with form data
+            st.session_state.gemini_api_key = gemini_key_input
+            if new_yt_key_input and new_yt_key_input not in st.session_state.youtube_api_keys:
+                st.session_state.youtube_api_keys.append(new_yt_key_input)
+            
+            # Re-initialize clients with new keys
+            with st.spinner("클라이언트를 초기화하는 중..."):
+                youtube_utils.initialize_clients(st)
+            
+            if st.session_state.get('youtube_client'):
+                st.session_state.clients_initialized = True
+                st.success("✅ 키가 저장되고 클라이언트가 성공적으로 초기화되었습니다.")
+            else:
+                st.session_state.clients_initialized = False
+                st.error("❌ 클라이언트 초기화에 실패했습니다. API 키를 확인해주세요.")
+            
+            st.rerun()
+
+    # --- Separate actions outside the form ---
+    st.markdown("#### 저장된 YouTube API 키 삭제")
+    for i, key in enumerate(list(st.session_state.get('youtube_api_keys', []))):
+        col1, col2 = st.columns([4, 1])
+        col1.text_input(f"키 {i+1}", value=key, disabled=True, key=f"yt_key_disp_del_{i}")
+        if col2.button("삭제", key=f"del_yt_key_{i}"):
+            st.session_state.youtube_api_keys.pop(i)
+            st.rerun()
+
+    if st.button("⚠️ 현재 세션의 모든 키 삭제"):
+        st.session_state.youtube_api_keys = []
+        st.session_state.gemini_api_key = ""
+        st.session_state.clients_initialized = False
+        st.success("현재 세션의 모든 API 키가 삭제되었습니다.")
+        st.rerun()
+
 
     st.divider()
 
@@ -470,7 +483,7 @@ def render_individual_analysis_page():
                         details = { "title": uploaded_file.name, "script": script_text, "description": "", "comments": "" }
                         run_individual_analysis(details)
 
-def run_channel_analysis(url=None, video_count=None, channel_name=None, pdf_file=None):
+def run_channel_analysis(url=None, video_count=None, channel_name=None, pdf_file=None, collected_data=None):
     all_scripts_text = ""
     display_name = ""
 
@@ -492,7 +505,7 @@ def run_channel_analysis(url=None, video_count=None, channel_name=None, pdf_file
         
         elif channel_name:
             display_name = channel_name
-            for item in st.session_state.collected_data:
+            for item in collected_data:
                 if item.get("채널명") == channel_name and item.get('자막', '자막 없음') not in ["자막 없음", "자막 추출 오류"]:
                     all_scripts_text += f"제목: {item.get('제목', '')}\n대본: {item.get('자막', '')}\n\n"
 
@@ -554,7 +567,7 @@ def render_channel_analysis_page():
                         st.warning("분석할 채널을 하나 이상 선택해주세요.")
                     else:
                         for channel_name in selected_channels:
-                            run_channel_analysis(channel_name=channel_name)
+                            run_channel_analysis(channel_name=channel_name, collected_data=all_collected_data)
             else:
                 st.warning("'스크립트 & 댓글 수집' 탭에서 먼저 데이터를 수집해주세요.")
 
@@ -669,39 +682,141 @@ def render_time_analysis_page():
 
 def render_analysis_page():
     st.title("📊 데이터 분석")
-    st.markdown("수집된 데이터의 일 평균 조회수를 분석합니다.")
+    st.markdown("수집된 데이터의 일 평균 조회수를 분석하고, 그룹별로 관리합니다.")
     
     if not st.session_state.get('analysis_data'):
         st.warning("'스크립트 & 댓글 수집' 탭에서 분석할 데이터를 먼저 옮겨주세요.")
         return
 
     df = pd.DataFrame(st.session_state.analysis_data)
+    all_channels_in_data = df['채널명'].unique()
     
-    # --- 일 평균 조회수 계산 ---
-    # '게시일' 컬럼을 datetime 객체로 변환
-    df['게시일'] = pd.to_datetime(df['게시일'])
+    # --- 그룹 관리 ---
+    with st.expander("🔬 그룹 관리"):
+        st.write("채널들을 사용자 정의 그룹으로 묶어 관리할 수 있습니다.")
+        
+        # 새 그룹 생성
+        new_group_name = st.text_input("새 그룹 이름")
+        if st.button("새 그룹 생성"):
+            if new_group_name and new_group_name not in st.session_state.custom_groups:
+                st.session_state.custom_groups[new_group_name] = []
+                st.toast(f"'{new_group_name}' 그룹이 생성되었습니다.")
+                st.rerun()
+            elif not new_group_name:
+                st.warning("그룹 이름을 입력해주세요.")
+            else:
+                st.warning("이미 존재하는 그룹 이름입니다.")
+
+        st.divider()
+
+        # 기존 그룹에 채널 할당
+        if st.session_state.custom_groups:
+            selected_group = st.selectbox("채널을 할당할 그룹 선택", options=list(st.session_state.custom_groups.keys()))
+            
+            if selected_group:
+                current_channels_in_group = st.session_state.custom_groups[selected_group]
+                channels_to_assign = st.multiselect(
+                    "그룹에 포함할 채널 선택",
+                    options=all_channels_in_data,
+                    default=current_channels_in_group,
+                    key=f"multiselect_{selected_group}"
+                )
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("그룹에 채널 저장", key=f"save_group_{selected_group}"):
+                        st.session_state.custom_groups[selected_group] = channels_to_assign
+                        st.toast(f"'{selected_group}' 그룹 정보가 업데이트되었습니다.")
+                        st.rerun()
+                with col2:
+                     if st.button("그룹 삭제", type="primary", key=f"delete_group_{selected_group}"):
+                        del st.session_state.custom_groups[selected_group]
+                        st.toast(f"'{selected_group}' 그룹이 삭제되었습니다.")
+                        st.rerun()
+        else:
+            st.info("생성된 그룹이 없습니다. 새 그룹을 먼저 만들어주세요.")
+
+
+    # --- 채널별 데이터 관리 ---
+    with st.expander("🔬 채널별 데이터 관리"):
+        st.session_state.analysis_view_mode = st.radio(
+            "분석 보기 모드",
+            ("채널별", "그룹별"),
+            key='analysis_view_mode_radio',
+            horizontal=True
+        )
+
+    # 채널별 분석
+    if st.session_state.analysis_view_mode == "채널별":
+        all_channels = df['채널명'].unique()
+        for channel in all_channels:
+            with st.container(border=True):
+                st.markdown(f"#### {channel}")
+                channel_df = df[df['채널명'] == channel]
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    # 일 평균 조회수 합계
+                    total_avg_daily_views = channel_df['일 평균 조회수'].sum()
+                    st.metric(label="채널의 일 평균 조회수 총합", value=f"{total_avg_daily_views:,}")
+
+                # 조회수 구간 분석
+                bins = [0, 1000, 100000, 500000, 1000000, float('inf')]
+                labels = ['0-1천', '1천-10만', '10만-50만', '50만-100만', '100만 이상']
+                
+                channel_df['조회수 구간'] = pd.cut(channel_df['조회수'], bins=bins, labels=labels, right=False)
+                view_dist = channel_df['조회수 구간'].value_counts().reindex(labels, fill_value=0)
+                
+                view_dist_df = view_dist.reset_index()
+                view_dist_df.columns = ['조회수 구간', '개수']
+                
+                total_videos = len(channel_df)
+                view_dist_df['전체 비율'] = (view_dist_df['개수'] / total_videos * 100).apply(lambda x: f"{x:.2f}%")
+
+                with col2:
+                    st.write("조회수 구간별 분포")
+                    st.dataframe(view_dist_df, hide_index=True)
     
-    # 영상이 게시된 후 지난 날짜 계산
-    now = pd.to_datetime(datetime.now())
-    df['게시 후 일수'] = (now - df['게시일']).dt.days
-    # 최소 1일로 설정하여 0으로 나누는 오류 방지
-    df['게시 후 일수'] = df['게시 후 일수'].apply(lambda x: max(x, 1))
+    # 그룹별 분석
+    elif st.session_state.analysis_view_mode == "그룹별":
+        if not st.session_state.custom_groups:
+            st.info("표시할 그룹이 없습니다. '그룹 관리'에서 새 그룹을 만들어주세요.")
+        
+        for group_name, channels_in_group in st.session_state.custom_groups.items():
+            with st.container(border=True):
+                st.markdown(f"####  그룹: {group_name}")
+                group_df = df[df['채널명'].isin(channels_in_group)]
 
-    # 일 평균 조회수 계산
-    df['일 평균 조회수'] = df['조회수'] / df['게시 후 일수']
-    df['일 평균 조회수'] = df['일 평균 조회수'].astype(int)
+                if group_df.empty:
+                    st.write("이 그룹에 포함된 채널의 데이터가 없습니다.")
+                    continue
 
-    # --- 채널별 통계 ---
-    st.divider()
-    st.subheader("📈 채널별 일 평균 조회수 합계")
+                col1, col2 = st.columns(2)
+                with col1:
+                    # 일 평균 조회수 합계
+                    total_avg_daily_views = group_df['일 평균 조회수'].sum()
+                    st.metric(label="그룹의 일 평균 조회수 총합", value=f"{total_avg_daily_views:,}")
 
-    # 채널별로 그룹화하여 일 평균 조회수 합산
-    channel_avg_views = df.groupby('채널명')['일 평균 조회수'].sum().reset_index()
-    channel_avg_views = channel_avg_views.sort_values(by='일 평균 조회수', ascending=False)
-    
-    st.dataframe(channel_avg_views, use_container_width=True)
+                # 조회수 구간 분석
+                bins = [0, 1000, 100000, 500000, 1000000, float('inf')]
+                labels = ['0-1천', '1천-10만', '10만-50만', '50만-100만', '100만 이상']
+                
+                group_df['조회수 구간'] = pd.cut(group_df['조회수'], bins=bins, labels=labels, right=False)
+                view_dist = group_df['조회수 구간'].value_counts().reindex(labels, fill_value=0)
+                
+                view_dist_df = view_dist.reset_index()
+                view_dist_df.columns = ['조회수 구간', '개수']
+                
+                total_videos = len(group_df)
+                view_dist_df['전체 비율'] = (view_dist_df['개수'] / total_videos * 100).apply(lambda x: f"{x:.2f}%")
+
+                with col2:
+                    st.write("조회수 구간별 분포")
+                    st.dataframe(view_dist_df, hide_index=True)
 
     # --- 전체 통계 ---
+    st.divider()
+    st.subheader("📊 전체 데이터 요약")
     total_avg_daily_views = df['일 평균 조회수'].sum()
     st.metric(label="전체 채널의 일 평균 조회수 총합", value=f"{total_avg_daily_views:,}")
 
@@ -760,10 +875,14 @@ def main():
 
     if st.session_state.page_selection != "설정":
         # Check for keys and initialization status to provide better guidance
-        if not (st.session_state.get('youtube_api_keys') and st.session_state.get('gemini_api_key')):
-             st.warning("API 키가 없습니다. '⚙️ 설정' 페이지에서 키를 입력해주세요.")
-        elif not st.session_state.get('clients_initialized'):
-             st.error("API 클라이언트 초기화에 실패했습니다. '⚙️ 설정' 페이지에서 키를 확인하고 '클라이언트 초기화' 버튼을 눌러주세요.")
+        if not st.session_state.get('youtube_api_keys'):
+             st.warning("YouTube API 키가 없습니다. '⚙️ 설정' 페이지에서 키를 추가해주세요.")
+        if not st.session_state.get('gemini_api_key'):
+             st.warning("Gemini API 키가 없습니다. '⚙️ 설정' 페이지에서 키를 입력해주세요.")
+        
+        if st.session_state.get('youtube_api_keys') and st.session_state.get('gemini_api_key'):
+             if not st.session_state.get('clients_initialized'):
+                 st.error("API 클라이언트 초기화에 실패했습니다. '⚙️ 설정' 페이지에서 '저장 및 클라이언트 초기화' 버튼을 눌러주세요.")
 
     page_map = {
         "스크립트 & 댓글 수집": render_collection_page,
