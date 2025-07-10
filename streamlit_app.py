@@ -229,7 +229,7 @@ def render_data_table(title, data_key):
                 copied_count = len(items_to_copy)
                 skipped_count = copied_count - len(new_items_to_copy)
                 
-                st.toast(f"{len(new_items_to_copy)}개 항목을 분석으로 복사했습니다. (중복 {skipped_count}개 제외)")
+                st.success(f"✅ {len(new_items_to_copy)}개 항목을 분석으로 복사했습니다. (중복 {skipped_count}개 제외)")
                 st.rerun()
 
 def render_settings_page():
@@ -771,7 +771,7 @@ def render_analysis_page():
             st.session_state.analysis_data = [
                 item for i, item in enumerate(st.session_state.analysis_data) if i not in indices_to_delete
             ]
-            st.toast(f"{len(indices_to_delete)}개 항목을 분석 데이터에서 삭제했습니다.")
+            st.success(f"✅ {len(indices_to_delete)}개 항목을 분석 데이터에서 삭제했습니다.")
             st.rerun()
 
     # 삭제 후 데이터가 남아있는지 다시 확인
@@ -791,7 +791,7 @@ def render_analysis_page():
         if st.button("새 그룹 생성"):
             if new_group_name and new_group_name not in st.session_state.custom_groups:
                 st.session_state.custom_groups[new_group_name] = []
-                st.toast(f"'{new_group_name}' 그룹이 생성되었습니다.")
+                st.success(f"✅ '{new_group_name}' 그룹이 생성되었습니다.")
                 st.rerun()
             elif not new_group_name:
                 st.warning("그룹 이름을 입력해주세요.")
@@ -817,12 +817,12 @@ def render_analysis_page():
                 with col1:
                     if st.button("그룹에 채널 저장", key=f"save_group_{selected_group}"):
                         st.session_state.custom_groups[selected_group] = channels_to_assign
-                        st.toast(f"'{selected_group}' 그룹 정보가 업데이트되었습니다.")
+                        st.success(f"✅ '{selected_group}' 그룹 정보가 업데이트되었습니다.")
                         st.rerun()
                 with col2:
                      if st.button("그룹 삭제", type="primary", key=f"delete_group_{selected_group}"):
                         del st.session_state.custom_groups[selected_group]
-                        st.toast(f"'{selected_group}' 그룹이 삭제되었습니다.")
+                        st.success(f"✅ '{selected_group}' 그룹이 삭제되었습니다.")
                         st.rerun()
         else:
             st.info("생성된 그룹이 없습니다. 새 그룹을 먼저 만들어주세요.")
