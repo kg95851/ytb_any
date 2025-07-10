@@ -702,6 +702,60 @@ def render_analysis_page():
         return
 
     df = pd.DataFrame(st.session_state.analysis_data)
+    df['게시일'] = pd.to_datetime(df['게시일']) # 날짜 필터를 위해 먼저 변환
+
+    # --- 분석 기간 설정 ---
+    with st.container(border=True):
+        st.subheader("🗓️ 분석 기간 설정")
+        min_date = df['게시일'].min().date()
+        max_date = df['게시일'].max().date()
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            start_date = st.date_input("시작일", value=min_date, min_value=min_date, max_value=max_date)
+        with col2:
+            end_date = st.date_input("종료일", value=max_date, min_value=min_date, max_value=max_date)
+    
+    # 선택된 기간으로 데이터 필터링
+    start_datetime = pd.to_datetime(start_date)
+    end_datetime = pd.to_datetime(end_date) + pd.Timedelta(days=1)
+    df_filtered = df[(df['게시일'] >= start_datetime) & (df['게시일'] < end_datetime)]
+
+    if df_filtered.empty:
+        st.warning("선택하신 기간에 해당하는 데이터가 없습니다.")
+        return
+
+    # --- 분석 데이터 관리 (삭제 기능 포함) ---
+    with st.expander("🔬 분석 데이터 관리", expanded=False):
+        df_for_editing = pd.DataFrame(st.session_state.analysis_data)
+        df_for_editing.insert(0, "삭제", False)
+
+        edited_df = st.data_editor(
+            df_for_editing,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "삭제": st.column_config.CheckboxColumn("삭제", default=False),
+            },
+            disabled=df_for_editing.columns.drop("삭제"),
+            key="analysis_data_editor"
+        )
+
+        indices_to_delete = edited_df[edited_df["삭제"] == True].index.tolist()
+
+        if st.button("🗑️ 분석 데이터에서 선택 항목 삭제", type="primary", disabled=not indices_to_delete):
+            st.session_state.analysis_data = [
+                item for i, item in enumerate(st.session_state.analysis_data) if i not in indices_to_delete
+            ]
+            st.toast(f"{len(indices_to_delete)}개 항목을 분석 데이터에서 삭제했습니다.")
+            st.rerun()
+            
+    # 삭제 후 데이터가 남아있는지 다시 확인
+    if not st.session_state.get('analysis_data'):
+        st.info("모든 데이터가 삭제되었습니다. 새로운 데이터를 추가해주세요.")
+        return
+
+    df = df_filtered # 필터링된 데이터로 분석 진행
     all_channels_in_data = df['채널명'].unique()
     
     # --- 그룹 관리 ---
@@ -749,15 +803,15 @@ def render_analysis_page():
         else:
             st.info("생성된 그룹이 없습니다. 새 그룹을 먼저 만들어주세요.")
 
-
-    # --- 채널별 데이터 관리 ---
-    with st.expander("🔬 채널별 데이터 관리"):
-        st.session_state.analysis_view_mode = st.radio(
-            "분석 보기 모드",
-            ("채널별", "그룹별"),
-            key='analysis_view_mode_radio',
-            horizontal=True
-        )
+    # --- 보기 모드 선택 ---
+    st.divider()
+    st.subheader("📈 분석 결과 보기")
+    st.session_state.analysis_view_mode = st.radio(
+        "분석 보기 모드",
+        ("채널별", "그룹별"),
+        key='analysis_view_mode_radio',
+        horizontal=True
+    )
 
     # --- 일 평균 조회수 계산 (항상 맨 위에 실행) ---
     try:
@@ -801,6 +855,9 @@ def render_analysis_page():
                 with col2:
                     st.write("조회수 구간별 분포")
                     st.dataframe(view_dist_df, hide_index=True)
+
+            with st.expander("해당 채널의 영상 목록 보기"):
+                st.dataframe(channel_df[['제목', '조회수', '게시일', '일 평균 조회수']].sort_values(by='일 평균 조회수', ascending=False), use_container_width=True)
     
     # 그룹별 분석
     elif calculation_success and st.session_state.analysis_view_mode == "그룹별":
@@ -838,6 +895,9 @@ def render_analysis_page():
                 with col2:
                     st.write("조회수 구간별 분포")
                     st.dataframe(view_dist_df, hide_index=True)
+
+            with st.expander("해당 그룹의 영상 목록 보기"):
+                st.dataframe(group_df[['채널명', '제목', '조회수', '게시일', '일 평균 조회수']].sort_values(by='일 평균 조회수', ascending=False), use_container_width=True)
 
     # --- 전체 통계 ---
     if calculation_success:
