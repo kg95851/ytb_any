@@ -166,11 +166,11 @@ def render_data_table(title, data_key):
         with col1:
             select_all_delete = st.checkbox("전체 삭제", key=f"delete_all_{data_key}")
         with col2:
-            select_all_move = st.checkbox("전체 이동", key=f"move_all_{data_key}")
+            select_all_copy = st.checkbox("전체 복사", key=f"copy_all_{data_key}")
 
         # --- 데이터 테이블 ---
         df_to_display.insert(0, "삭제", select_all_delete)
-        df_to_display.insert(1, "분석으로 이동", select_all_move)
+        df_to_display.insert(1, "분석으로 복사", select_all_copy)
 
         edited_df = st.data_editor(
             df_to_display,
@@ -178,14 +178,14 @@ def render_data_table(title, data_key):
             hide_index=True,
             column_config={
                 "삭제": st.column_config.CheckboxColumn("삭제", default=False),
-                "분석으로 이동": st.column_config.CheckboxColumn("이동", default=False),
+                "분석으로 복사": st.column_config.CheckboxColumn("복사", default=False),
             },
             disabled=df.columns,
             key=f"{data_key}_editor"
         )
 
         indices_to_delete = edited_df[edited_df["삭제"] == True].index.tolist()
-        indices_to_move = edited_df[edited_df["분석으로 이동"] == True].index.tolist()
+        indices_to_copy = edited_df[edited_df["분석으로 복사"] == True].index.tolist()
 
         # --- 버튼 로직 ---
         btn_col1, btn_col2 = st.columns(2)
@@ -196,22 +196,18 @@ def render_data_table(title, data_key):
                 st.rerun()
         
         with btn_col2:
-            if st.button(f"➡️ 분석으로 이동", disabled=not indices_to_move, key=f"{data_key}_move_selected"):
-                items_to_move = [st.session_state[data_key][i] for i in indices_to_move]
+            if st.button(f"➡️ 분석으로 복사", disabled=not indices_to_copy, key=f"{data_key}_copy_selected"):
+                items_to_copy = [st.session_state[data_key][i] for i in indices_to_copy]
                 # 이미 분석 데이터에 있는 영상은 제외 (ID 기준)
                 analysis_video_ids = {youtube_utils.get_video_id(item['영상 URL']) for item in st.session_state.analysis_data}
-                new_items_to_move = [item for item in items_to_move if youtube_utils.get_video_id(item['영상 URL']) not in analysis_video_ids]
+                new_items_to_copy = [item for item in items_to_copy if youtube_utils.get_video_id(item['영상 URL']) not in analysis_video_ids]
                 
-                st.session_state.analysis_data.extend(new_items_to_move)
-
-                # Move한 항목은 원래 리스트에서 삭제
-                for index in sorted(indices_to_move, reverse=True):
-                    del st.session_state[data_key][index]
+                st.session_state.analysis_data.extend(new_items_to_copy)
                 
-                moved_count = len(items_to_move)
-                skipped_count = moved_count - len(new_items_to_move)
+                copied_count = len(items_to_copy)
+                skipped_count = copied_count - len(new_items_to_copy)
                 
-                st.toast(f"{len(new_items_to_move)}개 항목을 분석으로 이동했습니다. (중복 {skipped_count}개 제외)")
+                st.toast(f"{len(new_items_to_copy)}개 항목을 분석으로 복사했습니다. (중복 {skipped_count}개 제외)")
                 st.rerun()
 
 def render_settings_page():
