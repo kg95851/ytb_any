@@ -160,8 +160,17 @@ def render_data_table(title, data_key):
         df = pd.DataFrame(st.session_state[data_key])
         
         df_to_display = df.copy()
-        df_to_display.insert(0, "삭제", False)
-        df_to_display.insert(1, "분석으로 이동", False)
+        
+        # --- 전체 선택 UI ---
+        col1, col2, col3 = st.columns([1, 1, 5])
+        with col1:
+            select_all_delete = st.checkbox("전체 삭제", key=f"delete_all_{data_key}")
+        with col2:
+            select_all_move = st.checkbox("전체 이동", key=f"move_all_{data_key}")
+
+        # --- 데이터 테이블 ---
+        df_to_display.insert(0, "삭제", select_all_delete)
+        df_to_display.insert(1, "분석으로 이동", select_all_move)
 
         edited_df = st.data_editor(
             df_to_display,
@@ -178,23 +187,33 @@ def render_data_table(title, data_key):
         indices_to_delete = edited_df[edited_df["삭제"] == True].index.tolist()
         indices_to_move = edited_df[edited_df["분석으로 이동"] == True].index.tolist()
 
-        col1, col2 = st.columns(2)
-        with col1:
+        # --- 버튼 로직 ---
+        btn_col1, btn_col2 = st.columns(2)
+        with btn_col1:
             if st.button(f"🗑️ 선택한 항목 삭제", type="primary", disabled=not indices_to_delete, key=f"{data_key}_delete_selected"):
                 for index in sorted(indices_to_delete, reverse=True):
                     del st.session_state[data_key][index]
+                st.session_state[f"delete_all_{data_key}"] = False # 전체 선택 초기화
                 st.rerun()
         
-        with col2:
+        with btn_col2:
             if st.button(f"➡️ 분석으로 이동", disabled=not indices_to_move, key=f"{data_key}_move_selected"):
                 items_to_move = [st.session_state[data_key][i] for i in indices_to_move]
-                st.session_state.analysis_data.extend(items_to_move)
+                # 이미 분석 데이터에 있는 영상은 제외 (ID 기준)
+                analysis_video_ids = {youtube_utils.get_video_id(item['영상 URL']) for item in st.session_state.analysis_data}
+                new_items_to_move = [item for item in items_to_move if youtube_utils.get_video_id(item['영상 URL']) not in analysis_video_ids]
+                
+                st.session_state.analysis_data.extend(new_items_to_move)
 
                 # Move한 항목은 원래 리스트에서 삭제
                 for index in sorted(indices_to_move, reverse=True):
                     del st.session_state[data_key][index]
                 
-                st.toast(f"{len(items_to_move)}개 항목을 분석으로 이동했습니다.")
+                moved_count = len(items_to_move)
+                skipped_count = moved_count - len(new_items_to_move)
+                
+                st.toast(f"{len(new_items_to_move)}개 항목을 분석으로 이동했습니다. (중복 {skipped_count}개 제외)")
+                st.session_state[f"move_all_{data_key}"] = False # 전체 선택 초기화
                 st.rerun()
 
 def render_settings_page():
@@ -746,8 +765,20 @@ def render_analysis_page():
             horizontal=True
         )
 
+    # --- 일 평균 조회수 계산 (항상 맨 위에 실행) ---
+    try:
+        df['게시일'] = pd.to_datetime(df['게시일'])
+        now = pd.to_datetime(datetime.now())
+        df['게시 후 일수'] = (now - df['게시일']).dt.days
+        df['게시 후 일수'] = df['게시 후 일수'].apply(lambda x: max(x, 1))
+        df['일 평균 조회수'] = (df['조회수'] / df['게시 후 일수']).astype(int)
+        calculation_success = True
+    except Exception:
+        calculation_success = False
+        st.error("일 평균 조회수 계산 중 오류가 발생했습니다. 데이터에 '게시일' 또는 '조회수' 정보가 올바른지 확인해주세요.")
+
     # 채널별 분석
-    if st.session_state.analysis_view_mode == "채널별":
+    if calculation_success and st.session_state.analysis_view_mode == "채널별":
         all_channels = df['채널명'].unique()
         for channel in all_channels:
             with st.container(border=True):
@@ -778,7 +809,7 @@ def render_analysis_page():
                     st.dataframe(view_dist_df, hide_index=True)
     
     # 그룹별 분석
-    elif st.session_state.analysis_view_mode == "그룹별":
+    elif calculation_success and st.session_state.analysis_view_mode == "그룹별":
         if not st.session_state.custom_groups:
             st.info("표시할 그룹이 없습니다. '그룹 관리'에서 새 그룹을 만들어주세요.")
         
@@ -815,15 +846,16 @@ def render_analysis_page():
                     st.dataframe(view_dist_df, hide_index=True)
 
     # --- 전체 통계 ---
-    st.divider()
-    st.subheader("📊 전체 데이터 요약")
-    total_avg_daily_views = df['일 평균 조회수'].sum()
-    st.metric(label="전체 채널의 일 평균 조회수 총합", value=f"{total_avg_daily_views:,}")
+    if calculation_success:
+        st.divider()
+        st.subheader("📊 전체 데이터 요약")
+        total_avg_daily_views = df['일 평균 조회수'].sum()
+        st.metric(label="전체 채널의 일 평균 조회수 총합", value=f"{total_avg_daily_views:,}")
 
-    # --- 원본 데이터 표시 ---
-    st.divider()
-    with st.expander("분석에 사용된 데이터 보기"):
-        st.dataframe(df[['채널명', '제목', '조회수', '게시일', '게시 후 일수', '일 평균 조회수']], use_container_width=True)
+        # --- 원본 데이터 표시 ---
+        st.divider()
+        with st.expander("분석에 사용된 데이터 보기"):
+            st.dataframe(df[['채널명', '제목', '조회수', '게시일', '게시 후 일수', '일 평균 조회수']], use_container_width=True)
 
 def main():
     st.set_page_config(page_title="YouTube 분석 도구", layout="wide")
