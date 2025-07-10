@@ -145,6 +145,28 @@ def inject_dark_theme_css():
             [data-testid="stDownloadButton"] p {
                 color: #31333F !important;
             }
+
+            /* --- Mobile Optimizations --- */
+            @media (max-width: 768px) {
+                /* 모바일에서 카드 패딩 줄이기 */
+                div.st-emotion-cache-1r4qj8v {
+                    padding: 0.5rem;
+                }
+                
+                /* 모바일에서 폰트 크기 미세 조정 */
+                .stApp {
+                    font-size: 14px;
+                }
+
+                h1 { font-size: 24px; }
+                h2 { font-size: 20px; }
+                h3 { font-size: 18px; }
+
+                /* 버튼, 입력창 등 위젯 크기 조정 */
+                .stButton>button, .stTextInput input, .stTextArea textarea, .stNumberInput input {
+                    padding: 0.4rem;
+                }
+            }
         </style>
     """
     st.markdown(dark_theme_css, unsafe_allow_html=True)
